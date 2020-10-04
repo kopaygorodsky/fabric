@@ -1309,24 +1309,19 @@ func (c *Chain) ValidateConsensusMetadata(oldOrdererConfig, newOrdererConfig cha
 		return errors.Wrap(err, "failed to unmarshal new etcdraft metadata configuration")
 	}
 
-	verifyOpts, err := createX509VerifyOptions(newOrdererConfig)
-	if err != nil {
-		return errors.Wrapf(err, "failed to create x509 verify options from old and new orderer config")
-	}
-
-	if err := VerifyConfigMetadata(newMetadata, verifyOpts, true); err != nil {
-		return errors.Wrap(err, "invalid new config metadata")
-	}
-
 	if newChannel {
-		// check if the consenters are a subset of the existing consenters (system channel consenters)
+		// check if the consenters are a subset of the existing consenters (system channel consenters).
 		set := ConsentersToMap(oldMetadata.Consenters)
-		for _, c := range newMetadata.Consenters {
-			if _, exits := set[string(c.ClientTlsCert)]; !exits {
-				return errors.New("new channel has consenter that is not part of system consenter set")
+
+		//check if new consenters list is not empty
+		if len(newMetadata.Consenters) > 0 {
+			for _, c := range newMetadata.Consenters {
+				if !set.Exists(c) {
+					return errors.New("new channel has consenter that is not part of system consenter set")
+				}
 			}
+			return nil
 		}
-		return nil
 	}
 
 	// create the dummy parameters for ComputeMembershipChanges
@@ -1340,11 +1335,13 @@ func (c *Chain) ValidateConsensusMetadata(oldOrdererConfig, newOrdererConfig cha
 		return err
 	}
 
-	//new config metadata was verified above. Additionally need to check new consenters for certificates expiration
-	for _, c := range changes.AddedNodes {
-		if err := validateConsenterTLSCerts(c, verifyOpts, false); err != nil {
-			return errors.Wrapf(err, "consenter %s:%d has invalid certificates", c.Host, c.Port)
-		}
+	verifyOpts, err := createX509VerifyOptions(newOrdererConfig)
+	if err != nil {
+		return errors.Wrapf(err, "failed to create x509 verify options from old and new orderer config")
+	}
+
+	if err := VerifyConfigMetadata(newMetadata, verifyOpts, changes); err != nil {
+		return errors.Wrap(err, "invalid new config metadata")
 	}
 
 	active := c.ActiveNodes.Load().([]uint64)

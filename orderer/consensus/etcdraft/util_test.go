@@ -176,7 +176,7 @@ func TestVerifyConfigMetadata(t *testing.T) {
 			singleConsenter,
 		},
 	}
-	assert.Nil(t, VerifyConfigMetadata(goodMetadata, goodVerifyingOpts, false))
+	assert.Nil(t, VerifyConfigMetadata(goodMetadata, goodVerifyingOpts, nil))
 
 	// test variety of bad metadata
 	for _, testCase := range []struct {
@@ -340,7 +340,7 @@ func TestVerifyConfigMetadata(t *testing.T) {
 			errRegex:   "certificate signed by unknown authority",
 		},
 	} {
-		err := VerifyConfigMetadata(testCase.metadata, testCase.verifyOpts, false)
+		err := VerifyConfigMetadata(testCase.metadata, testCase.verifyOpts, nil)
 		require.NotNil(t, err, testCase.description)
 		require.Regexp(t, testCase.errRegex, err)
 	}
@@ -370,6 +370,5 @@ func TestVerifyConfigMetadata(t *testing.T) {
 		},
 	}
 
-	require.Nil(t, VerifyConfigMetadata(medatadaWithExpiredConsenter, expiredCertVerifyOpts, true))
-	require.NotNil(t, VerifyConfigMetadata(medatadaWithExpiredConsenter, expiredCertVerifyOpts, false))
+	require.NotNil(t, VerifyConfigMetadata(medatadaWithExpiredConsenter, expiredCertVerifyOpts, nil))
 }

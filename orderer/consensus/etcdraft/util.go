@@ -37,8 +37,15 @@ func RaftPeers(consenterIDs []uint64) []raft.Peer {
 	return peers
 }
 
+type ConsentersMap map[string]struct{}
+
+func (c ConsentersMap) Exists(consenter *etcdraft.Consenter) bool {
+	_, exists := c[string(consenter.ClientTlsCert)]
+	return exists
+}
+
 // ConsentersToMap maps consenters into set where key is client TLS certificate
-func ConsentersToMap(consenters []*etcdraft.Consenter) map[string]struct{} {
+func ConsentersToMap(consenters []*etcdraft.Consenter) ConsentersMap {
 	set := map[string]struct{}{}
 	for _, c := range consenters {
 		set[string(c.ClientTlsCert)] = struct{}{}
@@ -200,7 +207,7 @@ func ConsensusMetadataFromConfigBlock(block *common.Block) (*etcdraft.ConfigMeta
 // VerifyConfigMetadata validates Raft config metadata.
 // If x509.VerifyOpts is nil, it will do only sanity check of certificates.
 // If ignoreCertExpiration is true, it will verify certificate and ignore expiration errors.
-func VerifyConfigMetadata(metadata *etcdraft.ConfigMetadata, verifyOpts x509.VerifyOptions, ignoreCertExpiration bool) error {
+func VerifyConfigMetadata(metadata *etcdraft.ConfigMetadata, verifyOpts x509.VerifyOptions, membershipChanges *MembershipChanges) error {
 	if metadata == nil {
 		// defensive check. this should not happen as CheckConfigMetadata
 		// should always be called with non-nil config metadata
@@ -235,12 +242,24 @@ func VerifyConfigMetadata(metadata *etcdraft.ConfigMetadata, verifyOpts x509.Ver
 		return errors.Errorf("empty consenter set")
 	}
 
+	var addedConsenters ConsentersMap
+
+	if membershipChanges != nil {
+		addedConsenters = ConsentersToMap(membershipChanges.AddedNodes)
+	}
+
 	//verifying certificates for being signed by CA and expiration depending on ignoreCertExpiration
 	for _, consenter := range metadata.Consenters {
 		if consenter == nil {
 			return errors.Errorf("metadata has nil consenter")
 		}
-		if err := validateConsenterTLSCerts(consenter, verifyOpts, ignoreCertExpiration); err != nil {
+
+		var ignoreExpiration bool
+		if addedConsenters.Exists(consenter) {
+			ignoreExpiration = true
+		}
+
+		if err := validateConsenterTLSCerts(consenter, verifyOpts, ignoreExpiration); err != nil {
 			return err
 		}
 	}
